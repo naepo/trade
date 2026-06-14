@@ -1206,13 +1206,11 @@ window.addEventListener('load', () => {
     showLock('잠금 중입니다. 잠시 후 다시 시도하세요.');
     startLockCountdown();
   }
-  // 세션이 살아있으면 바로 앱 로드
-  if (sessionStorage.getItem(SESSION_KEY)) {
-    // 세션은 있지만 _cryptoKey 없음 = 새로고침 → 재로그인 필요
-    // (보안: 키는 메모리에만 존재, 새로고침 시 반드시 재인증)
-    sessionStorage.removeItem(SESSION_KEY);
-  }
+  
+  // 기존 세션 무조건 삭제하고 처음부터 다시 로그인하도록 유도
+  sessionStorage.removeItem(SESSION_KEY); 
 });
+
 </script>
 </body>
 </html>
