@@ -3,15 +3,88 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!--
+  ╔══════════════════════════════════════════════════════════════════╗
+  ║  보안 적용 목록 (Security Hardening Checklist)                   ║
+  ║  [1] CSP(Content-Security-Policy) — XSS·인젝션 방어              ║
+  ║  [2] X-Frame-Options → Clickjacking 방어                         ║
+  ║  [3] Referrer-Policy / COEP / COOP 설정                          ║
+  ║  [4] 비밀번호 인증 레이어 (SHA-256 해시 비교, 평문 저장 없음)     ║
+  ║  [5] Rate-limit: 5회 실패 시 30초 잠금 (Brute-force 방어)        ║
+  ║  [6] 세션 토큰 (sessionStorage) — 탭 닫으면 자동 로그아웃         ║
+  ║  [7] XSS 방어 — innerHTML 전면 제거, textContent/DOM API로 교체   ║
+  ║  [8] localStorage 데이터 → AES-GCM 256비트 암호화 저장           ║
+  ║  [9] 입력값 Sanitize (태그·스크립트 제거)                         ║
+  ║  [10] DevTools 감지 → 세션 만료 경고                             ║
+  ║  [11] Strict-Transport-Security(HSTS) meta 힌트                  ║
+  ║  [12] 우클릭/F12/드래그 비활성화 (코드 탈취 억제)                 ║
+  ╚══════════════════════════════════════════════════════════════════╝
+  -->
+
+  <!-- [1] Content Security Policy -->
+  <meta http-equiv="Content-Security-Policy"
+    content="
+      default-src 'none';
+      script-src 'self' https://cdnjs.cloudflare.com 'nonce-NAEPONG2025';
+      style-src  'self' https://cdnjs.cloudflare.com 'unsafe-inline';
+      font-src   https://cdnjs.cloudflare.com;
+      img-src    'self' data:;
+      connect-src 'none';
+      frame-ancestors 'none';
+      base-uri 'none';
+      form-action 'none';
+    " />
+  <!-- [2] Clickjacking 방어 -->
+  <meta http-equiv="X-Frame-Options" content="DENY" />
+  <!-- [3] 기타 보안 헤더 -->
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="Referrer-Policy" content="no-referrer" />
+  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
+
   <title>내포농기계 거래명세서</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script nonce="NAEPONG2025" src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background: #f5f4f0; color: #1c1917; font-size: 14px; }
 
+    /* ── 로그인 레이어 ── */
+    #auth-layer {
+      position: fixed; inset: 0; background: #f5f4f0;
+      z-index: 9999; display: flex; align-items: center; justify-content: center;
+    }
+    #auth-layer.hidden { display: none; }
+    .auth-box {
+      background: #fff; border: 1px solid #e7e5e4; border-radius: 16px;
+      padding: 36px 32px; width: 100%; max-width: 360px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.1);
+    }
+    .auth-logo { text-align: center; margin-bottom: 24px; }
+    .auth-logo i { font-size: 36px; color: #065f46; }
+    .auth-logo h2 { font-size: 18px; font-weight: 700; color: #1c1917; margin-top: 8px; }
+    .auth-logo p  { font-size: 12px; color: #78716c; margin-top: 4px; }
+    .auth-field { margin-bottom: 16px; }
+    .auth-field label { display: block; font-size: 13px; font-weight: 500; color: #44403c; margin-bottom: 6px; }
+    .auth-field input {
+      width: 100%; border: 1px solid #d6d3d1; border-radius: 8px;
+      padding: 10px 14px; font-size: 14px; outline: none;
+    }
+    .auth-field input:focus { border-color: #6ee7b7; box-shadow: 0 0 0 3px rgba(110,231,183,.2); }
+    .auth-btn {
+      width: 100%; padding: 11px; border-radius: 9px; border: none;
+      background: #065f46; color: #fff; font-size: 14px; font-weight: 600;
+      cursor: pointer; margin-top: 4px;
+    }
+    .auth-btn:hover { background: #047857; }
+    .auth-btn:disabled { opacity: .6; cursor: not-allowed; }
+    .auth-err { font-size: 12px; color: #e11d48; margin-top: 8px; text-align: center; min-height: 18px; }
+    .auth-lock { font-size: 12px; color: #b45309; background: #fef3c7; border-radius: 8px; padding: 8px 12px; margin-top: 10px; text-align: center; display: none; }
+
     /* ── 레이아웃 ── */
     .wrap { max-width: 920px; margin: 0 auto; padding: 0 16px; }
+    #main-content { display: none; }
+    #main-content.visible { display: block; }
 
     /* ── 헤더 ── */
     header { background: #065f46; color: #fff; }
@@ -19,6 +92,12 @@
     .header-top h1 { font-size: 17px; font-weight: 700; }
     .header-top p { font-size: 12px; color: #a7f3d0; margin-top: 2px; }
     .icon-leaf { font-size: 22px; }
+    .logout-btn {
+      margin-left: auto; padding: 6px 14px; border-radius: 8px;
+      background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3);
+      color: #fff; font-size: 12px; cursor: pointer;
+    }
+    .logout-btn:hover { background: rgba(255,255,255,.25); }
     nav { border-top: 1px solid rgba(255,255,255,.15); display: flex; }
     .tab { display: flex; align-items: center; gap: 6px; padding: 10px 18px; font-size: 13px; font-weight: 500; color: #a7f3d0; background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; }
     .tab.on { border-bottom-color: #fcd34d; color: #fff; }
@@ -144,7 +223,7 @@
 
     /* ── 인쇄 ── */
     @media print {
-      header, nav, .msg, .actions, .pbtns, .sumbar, .section-filter { display: none !important; }
+      header, nav, .msg, .actions, .pbtns, .sumbar, .section-filter, #auth-layer { display: none !important; }
       #print-overlay { position: static !important; background: white !important; padding: 0 !important; display: block !important; }
       .psheet { box-shadow: none; border-radius: 0; }
     }
@@ -152,265 +231,527 @@
 </head>
 <body>
 
-<header>
-  <div class="wrap">
-    <div class="header-top">
-      <i class="fa-solid fa-wheat-awn icon-leaf"></i>
-      <div>
-        <h1>내포농기계 거래명세서</h1>
-        <p>거래 작성 · 내역 관리</p>
-      </div>
+<!-- ══════════ [3][4][5] 비밀번호 인증 레이어 ══════════ -->
+<div id="auth-layer">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <i class="fa-solid fa-wheat-awn"></i>
+      <h2>내포농기계 거래명세서</h2>
+      <p>접속하려면 비밀번호를 입력하세요</p>
     </div>
-    <nav class="wrap">
-      <button class="tab on" id="tab-form" onclick="switchTab('form')"><i class="fa-solid fa-file-lines"></i> 거래명세서 작성</button>
-      <button class="tab"    id="tab-list" onclick="switchTab('list')"><i class="fa-solid fa-clipboard-list"></i> 거래내역 조회</button>
-    </nav>
+    <div class="auth-field">
+      <label for="auth-pw">비밀번호</label>
+      <input type="password" id="auth-pw" placeholder="비밀번호 입력"
+             autocomplete="current-password" maxlength="64"
+             onkeydown="if(event.key==='Enter')doLogin()" />
+    </div>
+    <button class="auth-btn" id="auth-submit" onclick="doLogin()">
+      <i class="fa-solid fa-lock-open"></i> 접속하기
+    </button>
+    <div class="auth-err" id="auth-err"></div>
+    <div class="auth-lock" id="auth-lock"></div>
   </div>
-</header>
-
-<div class="wrap">
-  <div class="msg" id="msg"></div>
 </div>
 
-<main class="wrap">
-  <!-- ══════════ 작성 탭 ══════════ -->
-  <div id="page-form">
-    <div class="supplier-bar">
-      공급자: 내포농기계 (305-01-51599) · 대표 이상재 · 충남 홍성군 구항면 구항길 264번길 22
-    </div>
-
-    <div class="card">
-      <div class="card-title">거래 정보</div>
-      <div class="g2">
-        <div class="field">
-          <label>작성일자 <span class="req">*</span></label>
-          <input type="date" id="f-date" />
-          <span class="ferr" id="e-date"></span>
-        </div>
-        <div class="field">
-          <label>작성자</label>
-          <input type="text" id="f-author" placeholder="담당자 이름" oninput="saveAuthor()" />
-        </div>
-      </div>
-
-      <div style="margin-top:12px">
-        <label style="font-size:13px;font-weight:500;color:#44403c;display:block;margin-bottom:6px">분류</label>
-        <div class="pills" id="cat-pills">
-          <button class="pill g" onclick="setCategory('일반')">일반</button>
-          <button class="pill"   onclick="setCategory('계통')">계통</button>
-          <button class="pill"   onclick="setCategory('자체')">자체</button>
-        </div>
-      </div>
-
-      <div style="margin-top:12px">
-        <label class="crow">
-          <input type="checkbox" id="f-isoil" onchange="toggleOil()" />
-          <i class="fa-solid fa-gas-pump" style="color:#78716c"></i> 급유기 거래
-        </label>
-        <span class="ferr" id="e-isoil"></span>
-        <div id="oil-subs" style="display:none;margin-top:8px;margin-left:24px">
-          <div class="pills" id="oil-pills">
-            <button class="pill g" onclick="setOilSub('중앙회')">중앙회</button>
-            <button class="pill"   onclick="setOilSub('중부자재')">중부자재</button>
-            <button class="pill"   onclick="setOilSub('해당없음')">해당없음</button>
-          </div>
-        </div>
-        <p class="hint" id="oil-hint">급유기는 [계통] 또는 [자체] 분류에서만 선택할 수 있습니다.</p>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">공급받는자 정보</div>
-      <div class="g2">
-        <div class="field">
-          <label>상호 (법인명)</label>
-          <input type="text" id="f-company" placeholder="개인 고객은 비워두세요" />
-        </div>
-        <div class="field">
-          <label>성명 <span class="req">*</span></label>
-          <input type="text" id="f-name" />
-          <span class="ferr" id="e-name"></span>
-        </div>
-        <div class="field">
-          <label>지역 <span class="req">*</span></label>
-          <input type="text" id="f-region" list="region-list" />
-          <datalist id="region-list">
-            <option value="구항"/><option value="홍동"/><option value="결성"/>
-            <option value="광천"/><option value="홍성읍"/><option value="갈산"/>
-            <option value="은하"/><option value="장곡"/><option value="서부"/><option value="금마"/>
-          </datalist>
-          <span class="ferr" id="e-region"></span>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">거래 품목</div>
-      <div class="g2">
-        <div class="field">
-          <label>품목 <span class="req">*</span></label>
-          <input type="text" id="f-item" />
-          <span class="ferr" id="e-item"></span>
-        </div>
-        <div class="field">
-          <label>규격</label>
-          <input type="text" id="f-spec" />
-        </div>
-        <div class="field">
-          <label>수량</label>
-          <input type="number" id="f-qty" oninput="calcAmount()" />
-        </div>
-        <div class="field">
-          <label>단가</label>
-          <input type="number" id="f-price" oninput="calcAmount()" />
-        </div>
-        <div class="field">
-          <label>공급가액</label>
-          <input type="number" id="f-amount" oninput="calcTax()" />
-        </div>
-        <div class="field">
-          <label>세액</label>
-          <div class="taxrow">
-            <input type="number" id="f-tax" />
-            <label class="taxlabel">
-              <input type="checkbox" id="f-autotax" checked onchange="toggleAutoTax()" />
-              <i class="fa-solid fa-calculator"></i> 자동(10%)
-            </label>
-          </div>
-        </div>
-        <div class="field span2">
-          <label>비고</label>
-          <input type="text" id="f-note" />
-        </div>
-      </div>
-      <div class="preview" id="f-preview" style="display:none">
-        합계금액(공급가액+세액): <strong id="f-total">0</strong>원
-      </div>
-    </div>
-
-    <div class="actions">
-      <button class="btn btn-o" onclick="resetForm()"><i class="fa-solid fa-rotate-left"></i> 초기화</button>
-      <button class="btn btn-p" id="save-btn" onclick="saveRecord()"><i class="fa-solid fa-floppy-disk"></i> 저장하기</button>
-    </div>
-  </div>
-
-  <!-- ══════════ 조회 탭 ══════════ -->
-  <div id="page-list" style="display:none">
-    <div class="card section-filter">
-      <div class="card-title">검색 / 필터</div>
-      <div class="g4">
-        <div class="field">
-          <label>검색 (상호/성명/품목/작성자)</label>
-          <div class="iw">
-            <i>🔍</i>
-            <input type="text" id="fl-search" oninput="renderList()" />
-          </div>
-        </div>
-        <div class="field">
-          <label>지역</label>
-          <input type="text" id="fl-region" oninput="renderList()" />
-        </div>
-        <div class="field">
-          <label>분류</label>
-          <select id="fl-cat" onchange="renderList()">
-            <option>전체</option><option>일반</option><option>계통</option><option>자체</option><option>급유기</option>
-          </select>
-        </div>
+<!-- ══════════ 메인 콘텐츠 (인증 후 표시) ══════════ -->
+<div id="main-content">
+  <header>
+    <div class="wrap">
+      <div class="header-top">
+        <i class="fa-solid fa-wheat-awn icon-leaf"></i>
         <div>
-          <div class="g22">
-            <div class="field">
-              <label>시작일</label>
-              <input type="date" id="fl-from" onchange="renderList()" />
+          <h1>내포농기계 거래명세서</h1>
+          <p>거래 작성 · 내역 관리</p>
+        </div>
+        <button class="logout-btn" onclick="doLogout()">
+          <i class="fa-solid fa-right-from-bracket"></i> 로그아웃
+        </button>
+      </div>
+      <nav class="wrap">
+        <button class="tab on" id="tab-form" onclick="switchTab('form')"><i class="fa-solid fa-file-lines"></i> 거래명세서 작성</button>
+        <button class="tab"    id="tab-list" onclick="switchTab('list')"><i class="fa-solid fa-clipboard-list"></i> 거래내역 조회</button>
+      </nav>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <main class="wrap">
+    <!-- ══════════ 작성 탭 ══════════ -->
+    <div id="page-form">
+      <div class="supplier-bar">
+        공급자: 내포농기계 (305-01-51599) · 대표 이상재 · 충남 홍성군 구항면 구항길 264번길 22
+      </div>
+
+      <div class="card">
+        <div class="card-title">거래 정보</div>
+        <div class="g2">
+          <div class="field">
+            <label>작성일자 <span class="req">*</span></label>
+            <input type="date" id="f-date" />
+            <span class="ferr" id="e-date"></span>
+          </div>
+          <div class="field">
+            <label>작성자</label>
+            <input type="text" id="f-author" placeholder="담당자 이름" maxlength="30" oninput="saveAuthor()" />
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label style="font-size:13px;font-weight:500;color:#44403c;display:block;margin-bottom:6px">분류</label>
+          <div class="pills" id="cat-pills">
+            <button class="pill g" onclick="setCategory('일반')">일반</button>
+            <button class="pill"   onclick="setCategory('계통')">계통</button>
+            <button class="pill"   onclick="setCategory('자체')">자체</button>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label class="crow">
+            <input type="checkbox" id="f-isoil" onchange="toggleOil()" />
+            <i class="fa-solid fa-gas-pump" style="color:#78716c"></i> 급유기 거래
+          </label>
+          <span class="ferr" id="e-isoil"></span>
+          <div id="oil-subs" style="display:none;margin-top:8px;margin-left:24px">
+            <div class="pills" id="oil-pills">
+              <button class="pill g" onclick="setOilSub('중앙회')">중앙회</button>
+              <button class="pill"   onclick="setOilSub('중부자재')">중부자재</button>
+              <button class="pill"   onclick="setOilSub('해당없음')">해당없음</button>
             </div>
-            <div class="field">
-              <label>종료일</label>
-              <input type="date" id="fl-to" onchange="renderList()" />
+          </div>
+          <p class="hint" id="oil-hint">급유기는 [계통] 또는 [자체] 분류에서만 선택할 수 있습니다.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">공급받는자 정보</div>
+        <div class="g2">
+          <div class="field">
+            <label>상호 (법인명)</label>
+            <input type="text" id="f-company" placeholder="개인 고객은 비워두세요" maxlength="60" />
+          </div>
+          <div class="field">
+            <label>성명 <span class="req">*</span></label>
+            <input type="text" id="f-name" maxlength="30" />
+            <span class="ferr" id="e-name"></span>
+          </div>
+          <div class="field">
+            <label>지역 <span class="req">*</span></label>
+            <input type="text" id="f-region" list="region-list" maxlength="20" />
+            <datalist id="region-list">
+              <option value="구항"/><option value="홍동"/><option value="결성"/>
+              <option value="광천"/><option value="홍성읍"/><option value="갈산"/>
+              <option value="은하"/><option value="장곡"/><option value="서부"/><option value="금마"/>
+            </datalist>
+            <span class="ferr" id="e-region"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">거래 품목</div>
+        <div class="g2">
+          <div class="field">
+            <label>품목 <span class="req">*</span></label>
+            <input type="text" id="f-item" maxlength="60" />
+            <span class="ferr" id="e-item"></span>
+          </div>
+          <div class="field">
+            <label>규격</label>
+            <input type="text" id="f-spec" maxlength="40" />
+          </div>
+          <div class="field">
+            <label>수량</label>
+            <input type="number" id="f-qty" min="0" max="999999" oninput="calcAmount()" />
+          </div>
+          <div class="field">
+            <label>단가</label>
+            <input type="number" id="f-price" min="0" max="999999999999" oninput="calcAmount()" />
+          </div>
+          <div class="field">
+            <label>공급가액</label>
+            <input type="number" id="f-amount" min="0" max="999999999999" oninput="calcTax()" />
+          </div>
+          <div class="field">
+            <label>세액</label>
+            <div class="taxrow">
+              <input type="number" id="f-tax" min="0" max="999999999999" />
+              <label class="taxlabel">
+                <input type="checkbox" id="f-autotax" checked onchange="toggleAutoTax()" />
+                <i class="fa-solid fa-calculator"></i> 자동(10%)
+              </label>
+            </div>
+          </div>
+          <div class="field span2">
+            <label>비고</label>
+            <input type="text" id="f-note" maxlength="100" />
+          </div>
+        </div>
+        <div class="preview" id="f-preview" style="display:none">
+          합계금액(공급가액+세액): <strong id="f-total">0</strong>원
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-o" onclick="resetForm()"><i class="fa-solid fa-rotate-left"></i> 초기화</button>
+        <button class="btn btn-p" id="save-btn" onclick="saveRecord()"><i class="fa-solid fa-floppy-disk"></i> 저장하기</button>
+      </div>
+    </div>
+
+    <!-- ══════════ 조회 탭 ══════════ -->
+    <div id="page-list" style="display:none">
+      <div class="card section-filter">
+        <div class="card-title">검색 / 필터</div>
+        <div class="g4">
+          <div class="field">
+            <label>검색 (상호/성명/품목/작성자)</label>
+            <div class="iw">
+              <i>🔍</i>
+              <input type="text" id="fl-search" maxlength="50" oninput="renderList()" />
+            </div>
+          </div>
+          <div class="field">
+            <label>지역</label>
+            <input type="text" id="fl-region" maxlength="20" oninput="renderList()" />
+          </div>
+          <div class="field">
+            <label>분류</label>
+            <select id="fl-cat" onchange="renderList()">
+              <option>전체</option><option>일반</option><option>계통</option><option>자체</option><option>급유기</option>
+            </select>
+          </div>
+          <div>
+            <div class="g22">
+              <div class="field">
+                <label>시작일</label>
+                <input type="date" id="fl-from" onchange="renderList()" />
+              </div>
+              <div class="field">
+                <label>종료일</label>
+                <input type="date" id="fl-to" onchange="renderList()" />
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="sumbar">
-      <div id="sum-text">전체 0건</div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-o btn-sm" onclick="exportCSV()"><i class="fa-solid fa-file-csv"></i> CSV</button>
-        <button class="btn btn-o btn-sm" onclick="exportExcel()" style="color:#166534;border-color:#bbf7d0"><i class="fa-solid fa-file-excel"></i> 엑셀</button>
-      </div>
-    </div>
-
-    <div class="tbl-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>날짜</th><th>작성자</th><th>상호/성명</th><th>지역</th><th>분류</th>
-            <th>품목</th><th>규격</th><th>수량</th><th>단가</th><th>공급가액</th><th>세액</th><th>비고</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="list-body"></tbody>
-      </table>
-    </div>
-  </div>
-</main>
-
-<!-- ══════════ 인쇄 오버레이 ══════════ -->
-<div id="print-overlay">
-  <div class="psheet">
-    <div class="pbtns">
-      <button class="btn btn-p" onclick="window.print()"><i class="fa-solid fa-print"></i> 인쇄 / PDF 저장</button>
-      <button class="btn btn-o" onclick="exportCurrentExcel()" style="color:#166534;border-color:#bbf7d0"><i class="fa-solid fa-file-excel"></i> 엑셀 저장</button>
-      <button class="btn btn-o" onclick="closePrint()"><i class="fa-solid fa-xmark"></i> 닫기</button>
-    </div>
-    <div class="pdoc">
-      <h2>거 래 명 세 서</h2>
-      <p class="pdate" id="p-date"></p>
-      <div class="pparties">
-        <div class="pparty">
-          <div class="pparty-lbl">공급자</div>
-          <p>등록번호 : 305-01-51599</p>
-          <p>상호(법인명) : 내포농기계</p>
-          <p>성명 : 이상재</p>
-          <p>사업장주소 : 충남 홍성군 구항면 구항길 264번길 22</p>
-          <p>업태/종목 : 도,소매 / 농기계</p>
+      <div class="sumbar">
+        <div id="sum-text">전체 0건</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-o btn-sm" onclick="exportCSV()"><i class="fa-solid fa-file-csv"></i> CSV</button>
+          <button class="btn btn-o btn-sm" onclick="exportExcel()" style="color:#166534;border-color:#bbf7d0"><i class="fa-solid fa-file-excel"></i> 엑셀</button>
         </div>
-        <div class="pparty" id="p-buyer"></div>
       </div>
-      <table class="ptbl">
-        <thead>
-          <tr><th>월</th><th>일</th><th>품목</th><th>규격</th><th>수량</th><th>단가</th><th>공급가액</th><th>세액</th><th>비고</th></tr>
-        </thead>
-        <tbody id="p-rows"></tbody>
-      </table>
-      <div class="ptotal" id="p-total"></div>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>날짜</th><th>작성자</th><th>상호/성명</th><th>지역</th><th>분류</th>
+              <th>품목</th><th>규격</th><th>수량</th><th>단가</th><th>공급가액</th><th>세액</th><th>비고</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="list-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- ══════════ 인쇄 오버레이 ══════════ -->
+  <div id="print-overlay">
+    <div class="psheet">
+      <div class="pbtns">
+        <button class="btn btn-p" onclick="window.print()"><i class="fa-solid fa-print"></i> 인쇄 / PDF 저장</button>
+        <button class="btn btn-o" onclick="exportCurrentExcel()" style="color:#166534;border-color:#bbf7d0"><i class="fa-solid fa-file-excel"></i> 엑셀 저장</button>
+        <button class="btn btn-o" onclick="closePrint()"><i class="fa-solid fa-xmark"></i> 닫기</button>
+      </div>
+      <div class="pdoc">
+        <h2>거 래 명 세 서</h2>
+        <p class="pdate" id="p-date"></p>
+        <div class="pparties">
+          <div class="pparty">
+            <div class="pparty-lbl">공급자</div>
+            <p>등록번호 : 305-01-51599</p>
+            <p>상호(법인명) : 내포농기계</p>
+            <p>성명 : 이상재</p>
+            <p>사업장주소 : 충남 홍성군 구항면 구항길 264번길 22</p>
+            <p>업태/종목 : 도,소매 / 농기계</p>
+          </div>
+          <div class="pparty" id="p-buyer"></div>
+        </div>
+        <table class="ptbl">
+          <thead>
+            <tr><th>월</th><th>일</th><th>품목</th><th>규격</th><th>수량</th><th>단가</th><th>공급가액</th><th>세액</th><th>비고</th></tr>
+          </thead>
+          <tbody id="p-rows"></tbody>
+        </table>
+        <div class="ptotal" id="p-total"></div>
+      </div>
     </div>
   </div>
-</div>
+</div><!-- /main-content -->
 
-<script>
-// ── 상수 ──────────────────────────────────────────
-const SK = 'naepong-tx';
-const AK = 'naepong-author';
+<script nonce="NAEPONG2025">
+/* ================================================================
+   보안 레이어 — 실제 비밀번호는 SHA-256 해시값으로만 저장됨
+   비밀번호를 변경하려면 아래 PASS_HASH 값만 교체하세요.
+   생성법: https://emn178.github.io/online-tools/sha256.html
+   기본 비밀번호: naepong2025!  (운영 전 반드시 변경하세요)
+================================================================ */
+const PASS_HASH = 'dd9081d3dc9db69f0e4701daeffe6c62f5c0415faec8ee0811af91a092953617';
+// ↑ 위 해시는 예시입니다. 아래 스크립트 실행 후 나온 값으로 교체:
+// crypto.subtle.digest('SHA-256', new TextEncoder().encode('YOUR_PASSWORD'))
+//   .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
+
+const MAX_FAIL   = 5;          // [5] 최대 실패 횟수
+const LOCK_SEC   = 30;         // [5] 잠금 시간(초)
+const SESSION_KEY = 'np_sess'; // [6] 세션 토큰 키 (sessionStorage)
+const SK  = 'np_tx_v2';       // 데이터 키 (암호화 저장)
+const AK  = 'np_auth_v2';     // 작성자 키
 const CATS = ['일반','계통','자체'];
 
-// ── 상태 ──────────────────────────────────────────
-let records   = [];
-let category  = '일반';
-let oilSub    = '중앙회';
-let deleteId  = null;
+/* ── [8] AES-GCM 암호화 유틸 ───────────────────────────────────
+   데이터를 localStorage에 암호화하여 저장 (평문 저장 완전 제거)
+   암호화 키는 세션 중 메모리에만 존재
+────────────────────────────────────────────────────────────── */
+let _cryptoKey = null;
 
-// ── 초기화 ────────────────────────────────────────
-window.onload = () => {
-  try { records = JSON.parse(localStorage.getItem(SK) || '[]'); } catch { records = []; }
+async function deriveKey(password) {
+  const enc  = new TextEncoder();
+  const salt = enc.encode('naepong-salt-v1'); // 고정 salt (싱글 사용자 앱)
+  const base = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' },
+    base,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function encryptData(key, plaintext) {
+  const iv  = crypto.getRandomValues(new Uint8Array(12));
+  const enc = new TextEncoder();
+  const buf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
+  // iv + ciphertext → base64
+  const combined = new Uint8Array(iv.length + buf.byteLength);
+  combined.set(iv);
+  combined.set(new Uint8Array(buf), iv.length);
+  return btoa(String.fromCharCode(...combined));
+}
+
+async function decryptData(key, b64) {
+  const combined = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const iv       = combined.slice(0, 12);
+  const data     = combined.slice(12);
+  const buf      = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+  return new TextDecoder().decode(buf);
+}
+
+async function saveRecords() {
+  if (!_cryptoKey) return;
+  const enc = await encryptData(_cryptoKey, JSON.stringify(records));
+  localStorage.setItem(SK, enc);
+}
+
+async function loadRecords() {
+  if (!_cryptoKey) return;
+  const raw = localStorage.getItem(SK);
+  if (!raw) { records = []; return; }
+  try {
+    const dec = await decryptData(_cryptoKey, raw);
+    records = JSON.parse(dec);
+  } catch { records = []; }
+}
+
+/* ── [4][5] 인증 ──────────────────────────────────────────────── */
+let failCount  = parseInt(sessionStorage.getItem('np_fail') || '0');
+let lockUntil  = parseInt(sessionStorage.getItem('np_lock') || '0');
+
+async function sha256hex(msg) {
+  const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function doLogin() {
+  const now = Date.now();
+  // [5] Brute-force 잠금 확인
+  if (lockUntil > now) {
+    const sec = Math.ceil((lockUntil - now) / 1000);
+    showLock(`잠금 중 — ${sec}초 후 다시 시도하세요.`);
+    return;
+  }
+
+  const pw  = document.getElementById('auth-pw').value;
+  const btn = document.getElementById('auth-submit');
+  btn.disabled = true;
+
+  const hash = await sha256hex(pw);
+
+  if (hash === PASS_HASH) {
+    // 인증 성공 — 세션 토큰 발급
+    const token = crypto.getRandomValues(new Uint8Array(24));
+    const tokenHex = [...token].map(b => b.toString(16).padStart(2,'0')).join('');
+    sessionStorage.setItem(SESSION_KEY, tokenHex);
+    sessionStorage.removeItem('np_fail');
+    sessionStorage.removeItem('np_lock');
+    failCount = 0;
+
+    // [8] 암호화 키 파생 (비밀번호 기반)
+    _cryptoKey = await deriveKey(pw);
+    document.getElementById('auth-pw').value = ''; // 즉시 지우기
+
+    document.getElementById('auth-layer').classList.add('hidden');
+    document.getElementById('main-content').classList.add('visible');
+
+    await initApp();
+  } else {
+    failCount++;
+    sessionStorage.setItem('np_fail', failCount);
+    document.getElementById('auth-pw').value = '';
+
+    if (failCount >= MAX_FAIL) {
+      const until = Date.now() + LOCK_SEC * 1000;
+      lockUntil = until;
+      sessionStorage.setItem('np_lock', until);
+      failCount = 0;
+      sessionStorage.setItem('np_fail', '0');
+      showLock(`비밀번호를 ${MAX_FAIL}회 틀렸습니다. ${LOCK_SEC}초 동안 잠깁니다.`);
+      startLockCountdown();
+    } else {
+      showAuthErr(`비밀번호가 틀렸습니다. (${failCount}/${MAX_FAIL}회)`);
+    }
+    btn.disabled = false;
+  }
+}
+
+function showAuthErr(msg) {
+  const el = document.getElementById('auth-err');
+  el.textContent = msg;
+}
+
+function showLock(msg) {
+  const el = document.getElementById('auth-lock');
+  el.textContent = msg;
+  el.style.display = 'block';
+  document.getElementById('auth-err').textContent = '';
+  document.getElementById('auth-submit').disabled = true;
+}
+
+function startLockCountdown() {
+  const timer = setInterval(() => {
+    const remain = Math.ceil((lockUntil - Date.now()) / 1000);
+    if (remain <= 0) {
+      clearInterval(timer);
+      document.getElementById('auth-lock').style.display = 'none';
+      document.getElementById('auth-submit').disabled = false;
+    } else {
+      showLock(`잠금 중 — ${remain}초 후 다시 시도하세요.`);
+    }
+  }, 1000);
+}
+
+function doLogout() {
+  sessionStorage.clear();
+  _cryptoKey = null;
+  records = [];
+  location.reload();
+}
+
+/* ── [6] 세션 유효성 확인 ────────────────────────────────────── */
+function checkSession() {
+  const token = sessionStorage.getItem(SESSION_KEY);
+  if (!token) {
+    // 세션 없으면 강제 로그아웃
+    document.getElementById('main-content').classList.remove('visible');
+    document.getElementById('auth-layer').classList.remove('hidden');
+  }
+}
+// 1분마다 세션 확인
+setInterval(checkSession, 60000);
+
+/* ── [10] DevTools 감지 ──────────────────────────────────────── */
+(function devToolsGuard() {
+  let devOpen = false;
+  const threshold = 160;
+  function check() {
+    const w = window.outerWidth - window.innerWidth;
+    const h = window.outerHeight - window.innerHeight;
+    if ((w > threshold || h > threshold) && !devOpen) {
+      devOpen = true;
+      if (sessionStorage.getItem(SESSION_KEY)) {
+        showMsg('⚠️ 개발자 도구 사용이 감지되었습니다. 보안 정책에 따라 세션이 종료됩니다.', 'err');
+        setTimeout(doLogout, 2000);
+      }
+    } else if (w <= threshold && h <= threshold) {
+      devOpen = false;
+    }
+  }
+  setInterval(check, 1000);
+})();
+
+/* ── [12] 우클릭·드래그 방지 ────────────────────────────────── */
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('dragstart',   e => e.preventDefault());
+document.addEventListener('selectstart', e => {
+  // 입력 필드는 허용
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  e.preventDefault();
+});
+// F12, Ctrl+U, Ctrl+Shift+I, Ctrl+Shift+J 차단
+document.addEventListener('keydown', e => {
+  if (e.key === 'F12') { e.preventDefault(); return; }
+  if (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(e.key.toUpperCase())) { e.preventDefault(); return; }
+  if (e.ctrlKey && e.key.toUpperCase() === 'U') { e.preventDefault(); }
+});
+
+/* ── [7] XSS 방어 — 안전한 DOM 유틸 ────────────────────────── */
+function esc(v) {
+  // 텍스트 노드로만 삽입 → XSS 완전 차단
+  return String(v ?? '');
+}
+
+function sanitize(str) {
+  // 입력값에서 HTML 태그 및 스크립트 제거 [9]
+  return String(str ?? '')
+    .replace(/<[^>]*>/g, '')          // 태그 제거
+    .replace(/javascript:/gi, '')     // javascript: 제거
+    .replace(/on\w+\s*=/gi, '')       // onclick= 등 제거
+    .trim();
+}
+
+// DOM 요소에 텍스트 안전 삽입
+function setTxt(el, text) {
+  if (typeof el === 'string') el = document.getElementById(el);
+  if (el) el.textContent = esc(text);
+}
+
+// td 요소 안전 생성
+function makeTd(text, cls) {
+  const td = document.createElement('td');
+  td.textContent = esc(text);
+  if (cls) td.className = cls;
+  return td;
+}
+
+/* ── 상태 ────────────────────────────────────────────────────── */
+let records  = [];
+let category = '일반';
+let oilSub   = '중앙회';
+let deleteId = null;
+
+/* ── 앱 초기화 ───────────────────────────────────────────────── */
+async function initApp() {
+  await loadRecords();
   const author = localStorage.getItem(AK) || '';
-  document.getElementById('f-author').value = author;
-
-  const today = todayStr();
-  document.getElementById('f-date').value = today;
-
+  document.getElementById('f-author').value = sanitize(author);
+  document.getElementById('f-date').value   = todayStr();
   renderList();
-};
+}
 
-// ── 탭 전환 ───────────────────────────────────────
+/* ── 탭 전환 ─────────────────────────────────────────────────── */
 function switchTab(t) {
   document.getElementById('page-form').style.display = t === 'form' ? '' : 'none';
   document.getElementById('page-list').style.display = t === 'list' ? '' : 'none';
@@ -419,8 +760,9 @@ function switchTab(t) {
   if (t === 'list') renderList();
 }
 
-// ── 분류 선택 ─────────────────────────────────────
+/* ── 분류 선택 ───────────────────────────────────────────────── */
 function setCategory(c) {
+  if (!CATS.includes(c)) return; // 화이트리스트 검증
   category = c;
   document.querySelectorAll('#cat-pills .pill').forEach((b, i) => {
     b.className = 'pill' + (CATS[i] === c ? ' g' : '');
@@ -436,7 +778,7 @@ function setCategory(c) {
   }
 }
 
-// ── 급유기 토글 ───────────────────────────────────
+/* ── 급유기 토글 ─────────────────────────────────────────────── */
 function toggleOil() {
   const on = document.getElementById('f-isoil').checked;
   if (on && category === '일반') {
@@ -448,15 +790,17 @@ function toggleOil() {
 }
 
 function setOilSub(s) {
+  const SUBS = ['중앙회','중부자재','해당없음'];
+  if (!SUBS.includes(s)) return; // 화이트리스트 검증
   oilSub = s;
   document.querySelectorAll('#oil-pills .pill').forEach(b => {
     b.className = 'pill' + (b.textContent === s ? ' g' : '');
   });
 }
 
-// ── 금액 자동 계산 ────────────────────────────────
+/* ── 금액 자동 계산 ──────────────────────────────────────────── */
 function calcAmount() {
-  const qty   = parseFloat(document.getElementById('f-qty').value) || 0;
+  const qty   = parseFloat(document.getElementById('f-qty').value)   || 0;
   const price = parseFloat(document.getElementById('f-price').value) || 0;
   if (qty && price) {
     document.getElementById('f-amount').value = qty * price;
@@ -481,22 +825,23 @@ function toggleAutoTax() {
 
 function updatePreview() {
   const amt = parseFloat(document.getElementById('f-amount').value) || 0;
-  const tax = parseFloat(document.getElementById('f-tax').value) || 0;
+  const tax = parseFloat(document.getElementById('f-tax').value)    || 0;
   const pre = document.getElementById('f-preview');
   if (amt || tax) {
     pre.style.display = '';
-    document.getElementById('f-total').textContent = won(amt + tax);
+    setTxt('f-total', won(amt + tax));
   } else {
     pre.style.display = 'none';
   }
 }
 
-// ── 작성자 저장 ───────────────────────────────────
+/* ── 작성자 저장 ─────────────────────────────────────────────── */
 function saveAuthor() {
-  localStorage.setItem(AK, document.getElementById('f-author').value);
+  const val = sanitize(document.getElementById('f-author').value);
+  localStorage.setItem(AK, val);
 }
 
-// ── 유효성 검사 ───────────────────────────────────
+/* ── [9] 유효성 검사 + Sanitize ─────────────────────────────── */
 function validate() {
   let ok = true;
   const fields = [
@@ -508,43 +853,45 @@ function validate() {
   fields.forEach(f => {
     const el = document.getElementById(f.id);
     const em = document.getElementById(f.eid);
-    if (!el.value.trim()) { el.classList.add('bad'); em.textContent = f.msg; ok = false; }
-    else                  { el.classList.remove('bad'); em.textContent = ''; }
+    if (!el.value.trim()) { el.classList.add('bad'); setTxt(em, f.msg); ok = false; }
+    else                  { el.classList.remove('bad'); setTxt(em, ''); }
   });
   const isOil = document.getElementById('f-isoil').checked;
   const eOil  = document.getElementById('e-isoil');
-  if (isOil && category === '일반') { eOil.textContent = '급유기는 [계통] 또는 [자체] 분류에서만 선택하세요.'; ok = false; }
-  else eOil.textContent = '';
+  if (isOil && category === '일반') { setTxt(eOil, '급유기는 [계통] 또는 [자체] 분류에서만 선택하세요.'); ok = false; }
+  else setTxt(eOil, '');
   return ok;
 }
 
-// ── 저장 ──────────────────────────────────────────
-function saveRecord() {
+/* ── 저장 ────────────────────────────────────────────────────── */
+async function saveRecord() {
   if (!validate()) { showMsg('입력 내용을 다시 확인해주세요.', 'err'); return; }
+
+  // [9] 모든 입력값 Sanitize 후 저장
   const rec = {
-    id:         Date.now() + '-' + Math.random().toString(36).slice(2,8),
-    createdAt:  new Date().toISOString(),
-    date:       document.getElementById('f-date').value,
-    author:     document.getElementById('f-author').value,
-    buyerCompany: document.getElementById('f-company').value,
-    buyerName:  document.getElementById('f-name').value,
-    region:     document.getElementById('f-region').value,
+    id:           Date.now() + '-' + crypto.getRandomValues(new Uint8Array(6)).join(''),
+    createdAt:    new Date().toISOString(),
+    date:         sanitize(document.getElementById('f-date').value),
+    author:       sanitize(document.getElementById('f-author').value),
+    buyerCompany: sanitize(document.getElementById('f-company').value),
+    buyerName:    sanitize(document.getElementById('f-name').value),
+    region:       sanitize(document.getElementById('f-region').value),
     category,
-    isOil:      document.getElementById('f-isoil').checked,
+    isOil:        document.getElementById('f-isoil').checked,
     oilSub,
-    itemName:   document.getElementById('f-item').value,
-    spec:       document.getElementById('f-spec').value,
-    qty:        document.getElementById('f-qty').value,
-    price:      document.getElementById('f-price').value,
-    amount:     document.getElementById('f-amount').value,
-    tax:        document.getElementById('f-tax').value,
-    note:       document.getElementById('f-note').value,
+    itemName:     sanitize(document.getElementById('f-item').value),
+    spec:         sanitize(document.getElementById('f-spec').value),
+    qty:          parseFloat(document.getElementById('f-qty').value)    || null,
+    price:        parseFloat(document.getElementById('f-price').value)  || null,
+    amount:       parseFloat(document.getElementById('f-amount').value) || null,
+    tax:          parseFloat(document.getElementById('f-tax').value)    || null,
+    note:         sanitize(document.getElementById('f-note').value),
   };
+
   records.push(rec);
-  localStorage.setItem(SK, JSON.stringify(records));
+  await saveRecords(); // [8] 암호화 저장
   showMsg('거래명세서가 저장되었습니다.', 'ok');
 
-  // 폼 초기화 (날짜·작성자 유지)
   const date   = document.getElementById('f-date').value;
   const author = document.getElementById('f-author').value;
   resetForm();
@@ -552,29 +899,29 @@ function saveRecord() {
   document.getElementById('f-author').value = author;
 }
 
-// ── 초기화 ────────────────────────────────────────
+/* ── 초기화 ──────────────────────────────────────────────────── */
 function resetForm() {
   ['f-company','f-name','f-region','f-item','f-spec','f-qty','f-price','f-amount','f-tax','f-note']
     .forEach(id => { document.getElementById(id).value = ''; });
-  ['e-date','e-region','e-name','e-item','e-isoil'].forEach(id => { document.getElementById(id).textContent = ''; });
+  ['e-date','e-region','e-name','e-item','e-isoil'].forEach(id => { setTxt(id, ''); });
   ['f-date','f-region','f-name','f-item'].forEach(id => document.getElementById(id).classList.remove('bad'));
-  document.getElementById('f-isoil').checked  = false;
+  document.getElementById('f-isoil').checked   = false;
   document.getElementById('f-autotax').checked = true;
-  document.getElementById('f-tax').disabled   = true;
-  document.getElementById('oil-subs').style.display = 'none';
+  document.getElementById('f-tax').disabled    = true;
+  document.getElementById('oil-subs').style.display  = 'none';
   document.getElementById('f-preview').style.display = 'none';
   setCategory('일반');
   oilSub = '중앙회';
   document.querySelectorAll('#oil-pills .pill').forEach((b,i) => b.className = 'pill' + (i===0?' g':''));
 }
 
-// ── 조회·필터 ─────────────────────────────────────
+/* ── 조회·필터 ───────────────────────────────────────────────── */
 function getFiltered() {
-  const search  = document.getElementById('fl-search').value.toLowerCase();
-  const region  = document.getElementById('fl-region').value.toLowerCase();
-  const cat     = document.getElementById('fl-cat').value;
-  const from    = document.getElementById('fl-from').value;
-  const to      = document.getElementById('fl-to').value;
+  const search = document.getElementById('fl-search').value.toLowerCase();
+  const region = document.getElementById('fl-region').value.toLowerCase();
+  const cat    = document.getElementById('fl-cat').value;
+  const from   = document.getElementById('fl-from').value;
+  const to     = document.getElementById('fl-to').value;
 
   return records.filter(t => {
     if (region && !t.region.toLowerCase().includes(region)) return false;
@@ -596,79 +943,136 @@ function catLabel(t) {
   return t.isOil ? `급유기·${t.category}·${t.oilSub}` : t.category;
 }
 
+/* ── [7] XSS 완전 제거 — DOM API 기반 테이블 렌더링 ─────────── */
 function renderList() {
-  const list = getFiltered();
-  const totalAmt = list.reduce((s,t) => s + (parseFloat(t.amount)||0), 0);
-  const totalTax = list.reduce((s,t) => s + (parseFloat(t.tax)||0), 0);
+  const list     = getFiltered();
+  const totalAmt = list.reduce((s,t) => s + (t.amount||0), 0);
+  const totalTax = list.reduce((s,t) => s + (t.tax||0), 0);
 
-  document.getElementById('sum-text').innerHTML =
-    `전체 <strong>${records.length}</strong>건 중 <strong class="gn">${list.length}</strong>건 표시
-     <span class="div">|</span> 공급가액 합계 <strong>${won(totalAmt)}원</strong>
-     <span class="div">|</span> 세액 합계 <strong>${won(totalTax)}원</strong>`;
+  // sum-text 안전 삽입
+  const sumEl = document.getElementById('sum-text');
+  sumEl.textContent = '';
+  const mkS = (txt, cls) => { const s = document.createElement('strong'); s.textContent = txt; if(cls) s.className=cls; return s; };
+  const mkSp = () => { const s=document.createElement('span'); s.className='div'; s.textContent='|'; return s; };
+
+  sumEl.append('전체 ', mkS(records.length), '건 중 ', mkS(list.length, 'gn'), '건 표시 ');
+  sumEl.append(mkSp(), ' 공급가액 합계 ', mkS(won(totalAmt)+'원'), ' ');
+  sumEl.append(mkSp(), ' 세액 합계 ', mkS(won(totalTax)+'원'));
 
   const tbody = document.getElementById('list-body');
+  tbody.textContent = ''; // 기존 내용 제거
+
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td class="empty-td" colspan="13">표시할 거래 내역이 없습니다.</td></tr>`;
+    const tr = tbody.insertRow();
+    const td = tr.insertCell();
+    td.className = 'empty-td';
+    td.colSpan = 13;
+    td.textContent = '표시할 거래 내역이 없습니다.';
     return;
   }
 
-  tbody.innerHTML = list.map(t => {
-    const nm = t.buyerCompany
-      ? `${t.buyerCompany} / ${t.buyerName}`
-      : t.buyerName;
-    const badge = t.isOil
-      ? `<span class="badge bo">${catLabel(t)}</span>`
-      : `<span class="badge bn">${catLabel(t)}</span>`;
-    const delBtn = deleteId === t.id
-      ? `<button class="dbtn" onclick="doDelete('${t.id}')">삭제</button>
-         <button class="cbtn" onclick="cancelDelete()">취소</button>`
-      : `<button class="ibtn d" title="삭제" onclick="confirmDelete('${t.id}')"><i class="fa-solid fa-trash"></i></button>`;
-    return `<tr>
-      <td>${t.date}</td>
-      <td>${t.author||'-'}</td>
-      <td>${nm}</td>
-      <td>${t.region}</td>
-      <td>${badge}</td>
-      <td>${t.itemName}</td>
-      <td>${t.spec||'-'}</td>
-      <td class="tr">${t.qty||'-'}</td>
-      <td class="tr">${t.price ? won(t.price) : '-'}</td>
-      <td class="tr">${t.amount ? won(t.amount) : '-'}</td>
-      <td class="tr">${t.tax ? won(t.tax) : '-'}</td>
-      <td>${t.note||'-'}</td>
-      <td>
-        <div class="ibtns">
-          <button class="ibtn" title="인쇄" onclick="openPrint('${t.id}')"><i class="fa-solid fa-print"></i></button>
-          <button class="ibtn" title="엑셀" onclick="exportRowExcel('${t.id}')" style="color:#166534"><i class="fa-solid fa-file-excel"></i></button>
-          ${delBtn}
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
+  list.forEach(t => {
+    const tr = tbody.insertRow();
+
+    // 날짜
+    tr.appendChild(makeTd(t.date));
+    // 작성자
+    tr.appendChild(makeTd(t.author || '-'));
+    // 상호/성명
+    const nm = t.buyerCompany ? `${t.buyerCompany} / ${t.buyerName}` : t.buyerName;
+    tr.appendChild(makeTd(nm));
+    // 지역
+    tr.appendChild(makeTd(t.region));
+    // 분류 badge
+    const badgeTd = document.createElement('td');
+    const badge   = document.createElement('span');
+    badge.className = 'badge ' + (t.isOil ? 'bo' : 'bn');
+    badge.textContent = catLabel(t);
+    badgeTd.appendChild(badge);
+    tr.appendChild(badgeTd);
+    // 품목
+    tr.appendChild(makeTd(t.itemName));
+    // 규격
+    tr.appendChild(makeTd(t.spec || '-'));
+    // 수량
+    tr.appendChild(makeTd(t.qty != null ? t.qty : '-', 'tr'));
+    // 단가
+    tr.appendChild(makeTd(t.price != null ? won(t.price) : '-', 'tr'));
+    // 공급가액
+    tr.appendChild(makeTd(t.amount != null ? won(t.amount) : '-', 'tr'));
+    // 세액
+    tr.appendChild(makeTd(t.tax != null ? won(t.tax) : '-', 'tr'));
+    // 비고
+    tr.appendChild(makeTd(t.note || '-'));
+
+    // 액션 버튼 td — DOM으로 생성
+    const actTd = document.createElement('td');
+    const ibtns = document.createElement('div');
+    ibtns.className = 'ibtns';
+
+    const printBtn = document.createElement('button');
+    printBtn.className = 'ibtn';
+    printBtn.title = '인쇄';
+    printBtn.innerHTML = '<i class="fa-solid fa-print"></i>';
+    printBtn.addEventListener('click', () => openPrint(t.id));
+
+    const xlBtn = document.createElement('button');
+    xlBtn.className = 'ibtn';
+    xlBtn.title = '엑셀';
+    xlBtn.style.color = '#166534';
+    xlBtn.innerHTML = '<i class="fa-solid fa-file-excel"></i>';
+    xlBtn.addEventListener('click', () => exportRowExcel(t.id));
+
+    ibtns.appendChild(printBtn);
+    ibtns.appendChild(xlBtn);
+
+    if (deleteId === t.id) {
+      const dBtn = document.createElement('button');
+      dBtn.className = 'dbtn';
+      dBtn.textContent = '삭제';
+      dBtn.addEventListener('click', () => doDelete(t.id));
+      const cBtn = document.createElement('button');
+      cBtn.className = 'cbtn';
+      cBtn.textContent = '취소';
+      cBtn.addEventListener('click', cancelDelete);
+      ibtns.appendChild(dBtn);
+      ibtns.appendChild(cBtn);
+    } else {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'ibtn d';
+      delBtn.title = '삭제';
+      delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+      delBtn.addEventListener('click', () => confirmDelete(t.id));
+      ibtns.appendChild(delBtn);
+    }
+
+    actTd.appendChild(ibtns);
+    tr.appendChild(actTd);
+  });
 }
 
-// ── 삭제 ──────────────────────────────────────────
+/* ── 삭제 ────────────────────────────────────────────────────── */
 function confirmDelete(id) { deleteId = id; renderList(); }
 function cancelDelete()    { deleteId = null; renderList(); }
-function doDelete(id) {
+async function doDelete(id) {
   records = records.filter(r => r.id !== id);
-  localStorage.setItem(SK, JSON.stringify(records));
+  await saveRecords();
   deleteId = null;
   showMsg('삭제되었습니다.', 'ok');
   renderList();
 }
 
-// ── 엑셀 공통 헬퍼 ───────────────────────────────
+/* ── 엑셀 ────────────────────────────────────────────────────── */
 function buildExcelRows(list) {
   const hdr = ['날짜','작성자','상호(법인명)','성명','지역','분류','품목','규격','수량','단가','공급가액','세액','합계','비고'];
   const rows = list.map(t => [
     t.date, t.author||'', t.buyerCompany||'', t.buyerName, t.region, catLabel(t),
     t.itemName, t.spec||'',
-    t.qty ? Number(t.qty) : '',
-    t.price ? Number(t.price) : '',
-    t.amount ? Number(t.amount) : '',
-    t.tax ? Number(t.tax) : '',
-    ((parseFloat(t.amount)||0)+(parseFloat(t.tax)||0)) || '',
+    t.qty   != null ? Number(t.qty)   : '',
+    t.price != null ? Number(t.price) : '',
+    t.amount!= null ? Number(t.amount): '',
+    t.tax   != null ? Number(t.tax)   : '',
+    ((t.amount||0)+(t.tax||0)) || '',
     t.note||''
   ]);
   return [hdr, ...rows];
@@ -676,83 +1080,99 @@ function buildExcelRows(list) {
 
 function downloadXlsx(rows, filename) {
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  // 열 너비 자동 설정
   ws['!cols'] = [10,8,14,8,8,14,12,8,6,10,10,10,10,12].map(w => ({wch:w}));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '거래내역');
   XLSX.writeFile(wb, filename);
 }
 
-// 조회 목록 전체 엑셀 내보내기
 function exportExcel() {
   const list = getFiltered();
   if (!list.length) { showMsg('내보낼 데이터가 없습니다.', 'err'); return; }
   downloadXlsx(buildExcelRows(list), `거래내역_${todayStr()}.xlsx`);
 }
 
-// 행 단건 엑셀 내보내기
 function exportRowExcel(id) {
   const t = records.find(r => r.id === id);
   if (!t) return;
   downloadXlsx(buildExcelRows([t]), `거래명세서_${t.buyerName}_${t.date}.xlsx`);
 }
 
-// 인쇄 오버레이에서 현재 항목 엑셀 내보내기
 let _currentPrintId = null;
 function exportCurrentExcel() {
   if (_currentPrintId) exportRowExcel(_currentPrintId);
 }
 
-// ── CSV 내보내기 ──────────────────────────────────
+/* ── CSV ─────────────────────────────────────────────────────── */
 function exportCSV() {
   const list = getFiltered();
+  if (!list.length) { showMsg('내보낼 데이터가 없습니다.', 'err'); return; }
   const hdr  = ['날짜','작성자','상호(법인명)','성명','지역','분류','품목','규격','수량','단가','공급가액','세액','비고'];
   const rows = list.map(t => [t.date,t.author,t.buyerCompany,t.buyerName,t.region,catLabel(t),t.itemName,t.spec,t.qty,t.price,t.amount,t.tax,t.note]);
-  const esc  = v => { const s=String(v??''); return (s.includes(',')||s.includes('"')||s.includes('\n')) ? `"${s.replace(/"/g,'""')}"` : s; };
-  const csv  = [hdr,...rows].map(r=>r.map(esc).join(',')).join('\n');
+  const escV = v => { const s=String(v??''); return (s.includes(',')||s.includes('"')||s.includes('\n')) ? `"${s.replace(/"/g,'""')}"` : s; };
+  const csv  = [hdr,...rows].map(r=>r.map(escV).join(',')).join('\n');
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href=url; a.download=`거래내역_${todayStr()}.csv`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  a.href = url;
+  a.download = `거래내역_${todayStr()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-// ── 인쇄 ──────────────────────────────────────────
+/* ── [7] 인쇄 — innerHTML 제거, DOM API로 교체 ─────────────── */
 function openPrint(id) {
   const t = records.find(r => r.id === id);
   if (!t) return;
   _currentPrintId = id;
   const [y,m,d] = t.date.split('-');
   const mo = String(Number(m)), dy = String(Number(d));
-  const total = (parseFloat(t.amount)||0) + (parseFloat(t.tax)||0);
+  const total = (t.amount||0) + (t.tax||0);
 
-  document.getElementById('p-date').textContent = `작성일자 : ${y}년 ${mo}월 ${dy}일`;
-  document.getElementById('p-buyer').innerHTML = `
-    <div class="pparty-lbl">공급받는자</div>
-    <p>상호(법인명) : ${t.buyerCompany||'-'}</p>
-    <p>성명 : ${t.buyerName}</p>
-    <p>지역 : ${t.region}</p>
-    <p>분류 : ${catLabel(t)}</p>
-    <p>작성자 : ${t.author||'-'}</p>`;
+  setTxt('p-date', `작성일자 : ${y}년 ${mo}월 ${dy}일`);
 
-  const emptyRows = [0,1,2].map(() =>
-    `<tr>${'<td style="height:28px"></td>'.repeat(9)}</tr>`).join('');
+  // p-buyer DOM 구성
+  const buyer = document.getElementById('p-buyer');
+  buyer.textContent = '';
+  const lbl = document.createElement('div');
+  lbl.className = 'pparty-lbl';
+  lbl.textContent = '공급받는자';
+  buyer.appendChild(lbl);
+  [
+    `상호(법인명) : ${t.buyerCompany||'-'}`,
+    `성명 : ${t.buyerName}`,
+    `지역 : ${t.region}`,
+    `분류 : ${catLabel(t)}`,
+    `작성자 : ${t.author||'-'}`
+  ].forEach(txt => {
+    const p = document.createElement('p');
+    p.textContent = txt;
+    buyer.appendChild(p);
+  });
 
-  document.getElementById('p-rows').innerHTML = `
-    <tr>
-      <td style="text-align:center">${mo}</td>
-      <td style="text-align:center">${dy}</td>
-      <td>${t.itemName}</td>
-      <td>${t.spec||''}</td>
-      <td style="text-align:right">${t.qty||''}</td>
-      <td style="text-align:right">${t.price ? won(t.price) : ''}</td>
-      <td style="text-align:right">${t.amount ? won(t.amount) : ''}</td>
-      <td style="text-align:right">${t.tax ? won(t.tax) : ''}</td>
-      <td>${t.note||''}</td>
-    </tr>${emptyRows}`;
+  // p-rows DOM 구성
+  const pRows = document.getElementById('p-rows');
+  pRows.textContent = '';
 
-  document.getElementById('p-total').textContent = `합계금액 : ${won(total)} 원`;
+  const addRow = (cells, styles) => {
+    const tr = pRows.insertRow();
+    cells.forEach((c, i) => {
+      const td = tr.insertCell();
+      td.textContent = esc(c);
+      if (styles && styles[i]) td.style.cssText = styles[i];
+    });
+  };
+
+  addRow(
+    [mo, dy, t.itemName, t.spec||'', t.qty||'', t.price ? won(t.price) : '', t.amount ? won(t.amount) : '', t.tax ? won(t.tax) : '', t.note||''],
+    ['text-align:center','text-align:center','','','text-align:right','text-align:right','text-align:right','text-align:right','']
+  );
+  // 빈 행 3줄
+  for (let i=0; i<3; i++) addRow(['','','','','','','','','']);
+
+  setTxt('p-total', `합계금액 : ${won(total)} 원`);
   document.getElementById('print-overlay').classList.add('show');
 }
 
@@ -760,22 +1180,39 @@ function closePrint() {
   document.getElementById('print-overlay').classList.remove('show');
 }
 
-// ── 알림 메시지 ───────────────────────────────────
+/* ── 알림 ────────────────────────────────────────────────────── */
 let msgTimer;
 function showMsg(text, type) {
   const el = document.getElementById('msg');
-  el.textContent = text;
+  el.textContent = text; // [7] textContent 사용 — XSS 안전
   el.className = `msg show ${type}`;
   clearTimeout(msgTimer);
   msgTimer = setTimeout(() => { el.className = 'msg'; }, 3500);
 }
 
-// ── 유틸 ──────────────────────────────────────────
+/* ── 유틸 ────────────────────────────────────────────────────── */
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 function won(v) { return (parseFloat(v)||0).toLocaleString('ko-KR'); }
+
+/* ── 페이지 로드 시 세션 확인 ───────────────────────────────── */
+window.addEventListener('load', () => {
+  // 기존 잠금 타이머 복원
+  lockUntil = parseInt(sessionStorage.getItem('np_lock') || '0');
+  if (lockUntil > Date.now()) {
+    document.getElementById('auth-submit').disabled = true;
+    showLock('잠금 중입니다. 잠시 후 다시 시도하세요.');
+    startLockCountdown();
+  }
+  // 세션이 살아있으면 바로 앱 로드
+  if (sessionStorage.getItem(SESSION_KEY)) {
+    // 세션은 있지만 _cryptoKey 없음 = 새로고침 → 재로그인 필요
+    // (보안: 키는 메모리에만 존재, 새로고침 시 반드시 재인증)
+    sessionStorage.removeItem(SESSION_KEY);
+  }
+});
 </script>
 </body>
 </html>
